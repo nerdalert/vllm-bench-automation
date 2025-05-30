@@ -1,0 +1,34 @@
+# 1. Base image + OS deps
+FROM python:3.12-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      git build-essential curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# 2. Install 'uv' for virtualenv tooling
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# 3. Clone vLLM & checkout benchmark branch
+WORKDIR /opt/benchmark
+RUN git clone https://github.com/vllm-project/vllm.git vllm && \
+    cd vllm
+
+# 4. Create & install into a virtualenv
+RUN bash -lc "\
+    uv venv venv-vllm-src --python 3.12 && \
+    source venv-vllm-src/bin/activate && \
+    VLLM_USE_PRECOMPILED=1 uv pip install -e vllm && \
+    uv pip install pandas datasets numpy \
+"
+
+# 5. Copy in scripts
+COPY entrypoint.sh /opt/benchmark/
+RUN chmod +x /opt/benchmark/entrypoint.sh
+
+# 6. Ephemeral storage for results
+VOLUME ["/results"]
+
+# 7. Entrypoint
+ENTRYPOINT ["/opt/benchmark/entrypoint.sh"]
