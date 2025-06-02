@@ -13,6 +13,54 @@ minikube start \
   --memory no-limit
 ```
 
+Modify your `--values-file` node selector section and decode replicas to force all pods onto your node's GPUs. For example, on a node with 4xL40S you would use something like this:
+
+```yaml
+sampleApplication:
+  baseConfigMapRefName: basic-gpu-preset
+  model:
+    modelArtifactURI: hf://meta-llama/Llama-3.2-3B-Instruct
+    modelName: "meta-llama/Llama-3.2-3B-Instruct"
+  prefill:
+    replicas: 0
+  decode:
+    replicas: 4
+redis:
+  enabled: false
+modelservice:
+  epp:
+    defaultEnvVarsOverride:
+      - name: ENABLE_KVCACHE_AWARE_SCORER
+        value: "true"
+      - name: ENABLE_PREFIX_AWARE_SCORER
+        value: "true"
+      - name: ENABLE_LOAD_AWARE_SCORER
+        value: "true"
+      - name: ENABLE_SESSION_AWARE_SCORER
+        value: "false"
+      - name: PD_ENABLED
+        value: "false"
+      - name: PD_PROMPT_LEN_THRESHOLD
+        value: "10"
+      - name: PREFILL_ENABLE_KVCACHE_AWARE_SCORER
+        value: "false"
+      - name: PREFILL_ENABLE_LOAD_AWARE_SCORER
+        value: "false"
+      - name: PREFILL_ENABLE_PREFIX_AWARE_SCORER
+        value: "false"
+      - name: PREFILL_ENABLE_SESSION_AWARE_SCORER
+        value: "false"
+  prefill:
+    nodeSelector:
+      kubernetes.io/hostname: minikube
+  decode:
+    nodeSelector:
+      kubernetes.io/hostname: minikube
+
+```
+
+Use [slim values file](https://github.com/llm-d/llm-d-deployer/tree/main/quickstart/examples) deployments in the examples directory if you are using an NVIDIA L4 since it will not be able to load a Llama model.
+
 Deploy with:
 
 ```bash

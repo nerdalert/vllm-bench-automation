@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -n "${HF_TOKEN:-}" ]]; then
-  export HUGGINGFACE_HUB_TOKEN="$HF_TOKEN"
-  echo "Using HF_TOKEN as HUGGINGFACE_HUB_TOKEN"
-else
+export HF_HOME="/tmp/huggingface_cache"
+mkdir -p "${HF_HOME}"
+
+if [[ -z "${HF_TOKEN:-}" ]]; then
   echo "HF_TOKEN not set; downloads may fail" >&2
 fi
 
@@ -17,6 +17,8 @@ for v in BASE_URL MODEL DATASET_NAME RANDOM_INPUT_LEN RANDOM_OUTPUT_LEN REQUEST_
   printf "  %s=%s\n" "$v" "${!v:-<unset>}"
 done
 echo "--------------------"
+
+TMP_RESULT_FILENAME="/tmp/${RESULT_FILENAME:-results.json}"
 
 CMD=(python /opt/benchmark/vllm/benchmarks/benchmark_serving.py
      --base_url "$BASE_URL"
@@ -36,11 +38,10 @@ if [[ -n "${MAX_CONCURRENCY:-}" ]]; then
   CMD+=(--max-concurrency "${MAX_CONCURRENCY}")
 fi
 
-# ── Save−result to CWD/results.json ───────────────────────────────────
+# ── Save−result to /tmp  ────────────────────────────────────────────────────
 CMD+=(--save-result)
-CMD+=(--result-filename "${RESULT_FILENAME:-results.json}")
+CMD+=(--result-filename "${TMP_RESULT_FILENAME}")
 
-# ── Always include metadata flag ─────────────────────────────────────────────
 CMD+=(--metadata)
 for kv in ${METADATA:-}; do
   CMD+=("$kv")
@@ -49,9 +50,8 @@ done
 echo "Running: ${CMD[*]}"
 "${CMD[@]}"
 
-# Cat the JSON back out with markers for results log copies
-OUT="${RESULT_FILENAME:-results.json}"
+# ── Cat the JSON back out with markers for results log copies ─────────────────
 echo "<<<RESULT_START>>>"
-cat "$OUT"
+cat "${TMP_RESULT_FILENAME}"
 echo
 echo "<<<RESULT_END>>>"

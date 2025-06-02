@@ -115,7 +115,7 @@ echo "🔖 Results will go into ./$RESULT_FILENAME"
 # ────────── Numeric‐rate loop ────────────────────────────────────
 for QPS in "${ALL_RATES[@]}"; do
   # skip Inf here
-  if [[ "${QPS,,}" == "inf" ]]; then
+  if [[ "$(echo "$QPS" | awk '{print tolower($0)}')" == "inf" ]]; then
     continue
   fi
 

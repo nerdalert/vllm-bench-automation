@@ -2,9 +2,10 @@
 
 - This benchmark using [benchmark_serving](https://github.com/vllm-project/vllm/blob/main/benchmarks/benchmark_serving.py) via vLLM. That is containerized in this [Containerfile](./containerfiles/).
 
-- For minikube see this [readme](README-minikube.md). It wraps up `[e2e-bench-control.sh](https://github.com/nerdalert/vllm-bench-automation/blob/main/e2e-bench-control.sh)` and will run multiple deployments in one shot (no-features, base, kvcache, etc) and then run `./run-bench.sh` on the current deployment. Will be updating to decouple from minikube.
+- For minikube see this [readme](README-minikube.md). It wraps up `[e2e-bench-control.sh](https://github.com/nerdalert/vllm-bench-automation/blob/main/e2e-bench-control.sh)`
+- and will run multiple deployments in one shot (no-features, base, kvcache, etc) and then run `./run-bench.sh` on the current deployment. Will be updating to decouple from minikube.
 
-- Copy these files into the quickstart directory. Modify the deployments in `quickstart/examples` to fit your env, (e.g. vllm args and decode replica counts).
+- Copy these files into the llm-d [quickstart directory](https://github.com/llm-d/llm-d-deployer/tree/main/quickstart). Modify the deployments in `quickstart/examples` to fit your env, (e.g. vllm args, decode replica counts, deployment ENVs etc).
 
 ## Deploy
 
@@ -32,11 +33,20 @@ The script [e2e-control.sh](https://github.com/nerdalert/vllm-bench-automation/b
 
 This spins up a job with the packaged vllm `[benchmark_serve.py](https://github.com/nerdalert/vllm-bench-automation/tree/main/containerfiles)` [ghcr.io/nerdalert/vllm-bench:latest](https://github.com/users/nerdalert/packages/container/package/vllm-bench) with the arguments passed via the run script. Swap out the metadata to match the scenario you are running for graphing results in [vllm-benchmark-graphs](./vllm-benchmark-graphs/).
 
-Example run:
+Get the address of the cluster with something like this:
 
 ```bash
-./run-bench.sh --model meta-llama/Llama-3.2-3B-Instruct \
-  --base_url http://llm-d-inference-gateway.llm-d.svc.cluster.local:80 \
+GATEWAY_ADDR=$(kubectl get gateway -n "$NAMESPACE" | tail -n1 | awk '{print $3}')
+# verify you got a valid address
+echo $GATEWAY_ADDR
+```
+
+Run the tests against the current deployment.
+
+```bash
+export MODEL=meta-llama/Llama-3.2-3B-Instruct
+./run-bench.sh --model ${MODEL} \
+  --base_url http://${GATEWAY_ADDR}:80 \
   --dataset-name random \
   --input-len 1000 \
   --output-len 500 \
