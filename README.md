@@ -2,7 +2,7 @@
 
 - This benchmark using [benchmark_serving](https://github.com/vllm-project/vllm/blob/main/benchmarks/benchmark_serving.py) via vLLM. That is containerized in this [Containerfile](./containerfiles/).
 
-- For minikube see this [readme](README-minikube.md)
+- For minikube see this [readme](README-minikube.md). It wraps up `[e2e-bench-control.sh](https://github.com/nerdalert/vllm-bench-automation/blob/main/e2e-bench-control.sh)` and will run multiple deployments in one shot (no-features, base, kvcache, etc) and then run `./run-bench.sh` on the current deployment. Will be updating to decouple from minikube.
 
 - Copy these files into the quickstart directory. Modify the deployments in `quickstart/examples` to fit your env, (e.g. vllm args and decode replica counts).
 
@@ -15,19 +15,22 @@ git clone https://github.com/llm-d/llm-d-deployer.git
 cd quickstart
 # no features
 ./llmd-installer.sh --values-file examples/no-features/slim/no-features-slim.yaml
-# Run benchmark then uninstall
+# Run benchmark ./run-bench.sh then uninstall
 ./llmd-installer.sh --uninstall
 # base (prefix scoring)
 ./llmd-installer.sh --values-file examples/base/base.yaml
-# Run benchmark then uninstall
+# Run benchmark ./run-bench.sh then uninstall
 ./llmd-installer.sh --uninstall
 # kvcache (kvcache aware scoring)
 ./llmd-installer.sh --values-file examples/kvcache/kvcache.yaml
+# Run benchmark ./run-bench.sh then uninstall
 ```
 
-## Run
+The script [e2e-control.sh](https://github.com/nerdalert/vllm-bench-automation/blob/main/e2e-bench-control.sh) automates all of those steps but is currently minikube only until updated.
 
-Swap out the metadata to match the scenario you are running for graphing results in [vllm-benchmark-graphs](./vllm-benchmark-graphs/).
+## Run Bench
+
+This spins up a job with the packaged vllm `[benchmark_serve.py](https://github.com/nerdalert/vllm-bench-automation/tree/main/containerfiles)` [ghcr.io/nerdalert/vllm-bench:latest](https://github.com/users/nerdalert/packages/container/package/vllm-bench) with the arguments passed via the run script. Swap out the metadata to match the scenario you are running for graphing results in [vllm-benchmark-graphs](./vllm-benchmark-graphs/).
 
 Example run:
 
