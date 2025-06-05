@@ -13,6 +13,8 @@ DATASET_NAME="random"
 RANDOM_INPUT_LEN="1000"
 RANDOM_OUTPUT_LEN="100"
 IGNORE_EOS="true"
+# SEED_VALUE will store the user-provided seed. If empty, a new timestamp will be used per iteration.
+SEED_VALUE=""
 
 # always-on
 SAVE_RESULT="true"
@@ -30,7 +32,7 @@ die(){ echo "❌ $*" >&2; exit 1; }
 usage(){
   cat <<EOF
 Usage: $0 [wrapper-opts] --model MODEL --base_url URL[:PORT] [--request-rates R1,R2,..] [--duration S]
-                 [--input-len N] [--output-len N] [--num-prompts N]
+                 [--input-len N] [--output-len N] [--num-prompts N] [--seed N]
 
 Wrapper options:
   --namespace       K8s namespace          (default $NAMESPACE)
@@ -39,23 +41,25 @@ Wrapper options:
   --metadata        metadata key=val…      (default "$METADATA")
   --result-file     local filename         (default "$RESULT_FILENAME")
 
-Benchmark flags:
+Benchmark flags (passed to the container):
   --model            MODEL                 (required)
   --base_url         URL[:PORT]            (required)
   --dataset-name     NAME                  (default $DATASET_NAME)
   --input-len        tokens per prompt     (default $RANDOM_INPUT_LEN)
   --output-len       tokens generated      (default $RANDOM_OUTPUT_LEN)
-  --ignore-eos        (flag)
-  --request-rates            comma list of QPS     (default "$RATES")
+  --ignore-eos       (flag, default if not specified: false, here: $IGNORE_EOS)
+  --seed             Random seed for vLLM  (default: timestamp, e.g., $(date +%s))
+  --request-rates    comma list of QPS     (default "$RATES")
   --duration         seconds per QPS       (default $DURATION)
-  --num-prompts      override total prompts for Inf run
+  --num-prompts      override total prompts for Inf run (optional)
 
 Example:
   $0 --model meta-llama/... \\
      --base_url http://gateway:80 \\
      --request-rates 1,5,10,inf --duration 120 \\
      --input-len 1000 --output-len 200 \\
-     --num-prompts 10000
+     --num-prompts 10000 \\
+     --seed 42 # Uses seed 42 for all request rate iterations
 EOF
   exit 1
 }
@@ -74,6 +78,7 @@ while [[ $# -gt 0 ]]; do
     --input-len)      RANDOM_INPUT_LEN="$2";shift 2;;
     --output-len)     RANDOM_OUTPUT_LEN="$2";shift 2;;
     --ignore-eos)     IGNORE_EOS="true";     shift 1;;
+    --seed)           SEED_VALUE="$2";      shift 2;;
     --request-rates)  RATES="$2";           shift 2;;
     --duration)       DURATION="$2";        shift 2;;
     --num-prompts)    PROMPTS_OVERRIDE="$2";shift 2;;
@@ -110,6 +115,11 @@ for r in "${ALL_RATES[@]}"; do
 done
 
 echo "▶️  Benchmarking MODEL=$MODEL at rates: ${ALL_RATES[*]} QPS for $DURATION seconds each"
+if [[ -n "$SEED_VALUE" ]]; then
+  echo "🌱 Using user-provided fixed SEED=$SEED_VALUE for all request rates."
+else
+  echo "🌱 Generating a new timestamp SEED for each request rate iteration."
+fi
 echo "🔖 Results will go into ./$RESULT_FILENAME"
 
 # ────────── Numeric‐rate loop ────────────────────────────────────
@@ -121,6 +131,16 @@ for QPS in "${ALL_RATES[@]}"; do
 
   NUM_PROMPTS=$(( QPS * DURATION ))
   JOB_NAME="${JOB_BASE_NAME}-${QPS}qps"
+
+  # Determine the seed for the current job
+  current_job_seed=""
+  if [[ -n "$SEED_VALUE" ]]; then # User provided a specific seed
+    current_job_seed="$SEED_VALUE"
+  else # User did not provide a seed, generate a new one for this iteration
+    current_job_seed=$(date +%s)
+  fi
+  echo "  🌱 For QPS=$QPS, using SEED=$current_job_seed"
+
 
   kubectl -n "$NAMESPACE" delete job "$JOB_NAME" --ignore-not-found
 
@@ -165,6 +185,8 @@ spec:
           value: "${RESULT_FILENAME}"
         - name: METADATA
           value: "${METADATA}"
+        - name: SEED
+          value: "${current_job_seed}"
 EOF
 
   echo "🚀 Launching $JOB_NAME (QPS=$QPS, prompts=$NUM_PROMPTS)…"
@@ -198,9 +220,22 @@ if printf '%s\n' "${ALL_RATES[@]}" | grep -iq '^inf$'; then
     NUM_PROMPTS="$PROMPTS_OVERRIDE"
   else
     NUM_PROMPTS=$(( max_rate * DURATION ))
+    if (( NUM_PROMPTS == 0 )); then # Handle case where max_rate might be 0 if only 'inf' is provided
+        NUM_PROMPTS=900 # Fallback to a default number of prompts for 'inf' if no numeric rates given
+        echo "⚠️ No numeric rates provided to calculate NUM_PROMPTS for 'inf' run, defaulting to ${NUM_PROMPTS} prompts."
+    fi
   fi
 
   JOB_NAME="${JOB_BASE_NAME}-inf"
+
+  # Determine the seed for the current job (inf rate)
+  current_job_seed=""
+  if [[ -n "$SEED_VALUE" ]]; then # User provided a specific seed
+    current_job_seed="$SEED_VALUE"
+  else # User did not provide a seed, generate a new one for this iteration
+    current_job_seed=$(date +%s)
+  fi
+  echo "  🌱 For QPS=$QPS (infinite), using SEED=$current_job_seed"
 
   kubectl -n "$NAMESPACE" delete job "$JOB_NAME" --ignore-not-found
 
@@ -245,6 +280,8 @@ spec:
           value: "${RESULT_FILENAME}"
         - name: METADATA
           value: "${METADATA}"
+        - name: SEED
+          value: "${current_job_seed}"
 EOF
 
   echo "🚀 Launching $JOB_NAME (infinite QPS, prompts=$NUM_PROMPTS)…"
@@ -263,9 +300,9 @@ EOF
     | sed '1d;$d' >> "$RESULT_FILENAME"
 
   echo "Appended results block for infinite QPS"
-fi
 
 echo "Cleaning up Job ${JOB_NAME}..."
 kubectl delete job "${JOB_NAME}" -n "${NAMESPACE}" --ignore-not-found
+fi
 
 echo "✅ All benchmarks complete. Combined results in ./$RESULT_FILENAME"

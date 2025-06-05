@@ -13,7 +13,8 @@ source venv-vllm-src/bin/activate
 
 echo "Starting benchmark at $(date)"
 echo "----- ENV VARS -----"
-for v in BASE_URL MODEL DATASET_NAME RANDOM_INPUT_LEN RANDOM_OUTPUT_LEN REQUEST_RATE NUM_PROMPTS IGNORE_EOS RESULT_FILENAME METADATA MAX_CONCURRENCY; do
+# Added SEED to the list of environment variables
+for v in BASE_URL MODEL DATASET_NAME RANDOM_INPUT_LEN RANDOM_OUTPUT_LEN REQUEST_RATE NUM_PROMPTS IGNORE_EOS RESULT_FILENAME METADATA MAX_CONCURRENCY SEED; do
   printf "  %s=%s\n" "$v" "${!v:-<unset>}"
 done
 echo "--------------------"
@@ -36,6 +37,11 @@ $([[ "${IGNORE_EOS:-false}" == "true" ]] && CMD+=(--ignore-eos))
 # optional max-concurrency
 if [[ -n "${MAX_CONCURRENCY:-}" ]]; then
   CMD+=(--max-concurrency "${MAX_CONCURRENCY}")
+fi
+
+# optional seed
+if [[ -n "${SEED:-}" ]]; then
+  CMD+=(--seed "${SEED}")
 fi
 
 # ── Save−result to /tmp  ────────────────────────────────────────────────────
